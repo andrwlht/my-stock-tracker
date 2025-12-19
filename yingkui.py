@@ -59,7 +59,7 @@ with st.expander("📝 填表说明 & 风险告知"):
 # 初始数据
 default_stocks = {
     "RKLX": {"name": "2X Long RKLB", "qty": 20.33, "cost": 45.64},
-    "CRWG": {"name": "2X Long CRWV", "qty": 140.0, "cost": 3.81}
+    "CRWG": {"name": "2X Long CRWV", "qty": 233.6, "cost": 3.83}
 }
 
 # 输入区
@@ -137,4 +137,5 @@ else:
 
 st.divider()
 st.caption("Developed by Gemini for Engineering Excellence. 🛠️")
+
 
