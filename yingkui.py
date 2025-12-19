@@ -10,7 +10,6 @@ PORTFOLIO = [
     {"ticker": "CRWG", "qty": 140.0, "cost": 3.81},
 ]
 
-# --- 2. 核心功能函数 ---
 @st.cache_data(ttl=60)
 def get_usd_cny():
     try:
@@ -21,23 +20,25 @@ def get_usd_cny():
 
 @st.cache_data(ttl=60)
 def fetch_prices(tickers):
-    """批量获取最新的美股价格"""
+    """采用更稳健的方法获取价格"""
     if not tickers: return {}
+    prices = {}
     try:
-        data = yf.download(tickers, period="1d", interval="1m", progress=False)
-        if data.empty: return {}
-        
-        prices = {}
+        # 逐个获取以确保稳定性，特别是对于杠杆ETF
         for t in tickers:
-            try:
-                if len(tickers) == 1:
-                    price = data['Close'].iloc[-1]
-                else:
-                    price = data['Close'][t].dropna().iloc[-1]
-                prices[t] = price
-            except: continue
+            ticker_obj = yf.Ticker(t)
+            # 尝试获取最新价格（先尝试快照数据，再尝试历史数据）
+            hist = ticker_obj.history(period="1d")
+            if not hist.empty:
+                prices[t] = hist['Close'].iloc[-1]
+            else:
+                # 备选方案：获取实时价格快照
+                info = ticker_obj.fast_info
+                if 'last_price' in info:
+                    prices[t] = info['last_price']
         return prices
-    except:
+    except Exception as e:
+        st.error(f"行情接口异常: {e}")
         return {}
 
 # --- 3. 界面展示 ---
@@ -45,10 +46,11 @@ st.set_page_config(page_title="美股持仓监控", layout="wide")
 st.title("📊 我的美股持仓监控 (USD → CNY)")
 
 rate = get_usd_cny()
-tickers = [item['ticker'] for item in PORTFOLIO]
+tickers_list = [item['ticker'] for item in PORTFOLIO]
+prices = fetch_prices(tickers_list)
 
-# 注意：这里已修正为 fetch_prices，与上方定义保持一致
-prices = fetch_prices(tickers) 
+# 调试辅助：如果你发现不显示，取消下面这行的注释可以看到后台抓到了哪些代码
+# st.write(f"调试信息 - 已获取到的价格: {prices}")
 
 if prices:
     rows = []
@@ -57,7 +59,10 @@ if prices:
 
     for item in PORTFOLIO:
         t = item['ticker']
-        if t not in prices: continue
+        # 增强容错：如果获取不到价格，给一个提示而不是直接跳过
+        if t not in prices:
+            st.warning(f"无法获取 {t} 的实时价格，请确认该股当前是否有交易量。")
+            continue
         
         cur_p = prices[t]
         qty = item['qty']
@@ -81,29 +86,32 @@ if prices:
             "盈亏率(%)": round(p_pct, 2)
         })
 
-    total_profit_usd = total_value_usd - total_cost_usd
-    total_profit_pct = (total_profit_usd / total_cost_usd * 100) if total_cost_usd != 0 else 0
+    if rows:
+        total_profit_usd = total_value_usd - total_cost_usd
+        total_profit_pct = (total_profit_usd / total_cost_usd * 100) if total_cost_usd != 0 else 0
 
-    c1, c2, c3 = st.columns(3)
-    c1.metric("总市值 (人民币)", f"¥{total_value_usd * rate:,.2f}")
-    c2.metric("总盈亏 (人民币)", f"¥{total_profit_usd * rate:,.2f}", f"{total_profit_pct:.2f}%")
-    c3.metric("实时汇率 (USD/CNY)", f"{rate:.4f}")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("总资产 (¥)", f"¥{total_value_usd * rate:,.2f}")
+        c2.metric("总盈亏 (¥)", f"¥{total_profit_usd * rate:,.2f}", f"{total_profit_pct:.2f}%")
+        c3.metric("实时汇率", f"{rate:.4f}")
 
-    df = pd.DataFrame(rows)
-    st.subheader("📋 详细持仓清单")
-    
-    def color_profit(val):
-        if isinstance(val, (int, float)):
-            return f"color: {'#ff4b4b' if val < 0 else '#00cc66'}"
-        return ""
+        df = pd.DataFrame(rows)
+        st.subheader("📋 详细持仓清单")
+        
+        def color_profit(val):
+            if isinstance(val, (int, float)):
+                return f"color: {'#ff4b4b' if val < 0 else '#00cc66'}"
+            return ""
 
-    st.dataframe(
-        df.style.applymap(color_profit, subset=['盈亏(¥)', '盈亏率(%)']),
-        use_container_width=True
-    )
+        st.dataframe(
+            df.style.applymap(color_profit, subset=['盈亏(¥)', '盈亏率(%)']),
+            use_container_width=True
+        )
+    else:
+        st.error("所有持仓代码均无法获取价格。")
 else:
     st.warning("行情获取中，请稍后...")
 
-if st.button("🔄 立即刷新数据"):
+if st.button("🔄 强制刷新"):
     st.cache_data.clear()
     st.rerun()
