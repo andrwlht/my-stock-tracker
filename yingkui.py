@@ -58,7 +58,6 @@ with st.expander("📝 填表说明 & 风险告知"):
 
 # 初始数据
 default_stocks = {
-    "RZLT": {"name": "Rezolute", "qty": 200.0, "cost": 1.26},
     "RKLX": {"name": "2X Long RKLB", "qty": 20.33, "cost": 45.64},
     "CRWG": {"name": "2X Long CRWV", "qty": 140.0, "cost": 3.81}
 }
@@ -138,3 +137,4 @@ else:
 
 st.divider()
 st.caption("Developed by Gemini for Engineering Excellence. 🛠️")
+
